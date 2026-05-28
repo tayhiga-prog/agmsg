@@ -596,3 +596,33 @@ JSON
   [ ! -f "$TEST_SKILL_DIR/run/cc-instance.$dead_cc" ]
   kill "$watcher_pid" 2>/dev/null || true
 }
+
+@test "watch.sh subscription is static — newly joined identities don't appear in a running watcher" {
+  mkdir -p "$TEST_SKILL_DIR/teams/myteam"
+  cat > "$TEST_SKILL_DIR/teams/myteam/config.json" <<JSON
+{"name":"myteam","agents":{"alice":{"registrations":[{"type":"claude-code","project":"$TEST_PROJECT"}]}}}
+JSON
+  DB="$TEST_SKILL_DIR/db/messages.db"
+
+  # Watcher starts with only `alice` registered. Default subscription set
+  # is resolved at launch and not re-evaluated each poll.
+  AGMSG_WATCH_INTERVAL=1 bash "$SCRIPTS/watch.sh" t-static "$TEST_PROJECT" claude-code > /tmp/agmsg-static 2>&1 &
+  local pid=$!
+  sleep 1
+
+  # Join `bob` to the same (project, type) after the watcher is running.
+  bash "$SCRIPTS/join.sh" myteam bob claude-code "$TEST_PROJECT"
+
+  # Insert messages for both. alice should arrive (alice was in the original
+  # subscription set); bob should NOT arrive (joined after launch).
+  sqlite3 "$DB" "INSERT INTO messages (team, from_agent, to_agent, body) VALUES ('myteam', 'sys', 'alice', 'for-alice-static');"
+  sqlite3 "$DB" "INSERT INTO messages (team, from_agent, to_agent, body) VALUES ('myteam', 'sys', 'bob',   'for-bob-static');"
+
+  sleep 3
+  kill -TERM "$pid" 2>/dev/null
+  wait "$pid" 2>/dev/null || true
+
+  grep -q "for-alice-static" /tmp/agmsg-static
+  ! grep -q "for-bob-static" /tmp/agmsg-static
+  rm -f /tmp/agmsg-static
+}
