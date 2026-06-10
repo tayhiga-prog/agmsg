@@ -954,19 +954,28 @@ JSON
   mkdir -p "$TEST_PROJECT/.claude"
   # Pre-populate with both user permissions and an agmsg-owned Stop entry,
   # then verify `set off` strips only the agmsg entry without choking on
-  # the file size.
+  # the file size. Build the inflated fixture via sqlite3 (no python3
+  # dependency — agmsg is bash + sqlite3 only).
   bash "$SCRIPTS/delivery.sh" set turn claude-code "$TEST_PROJECT"
-  # Now inflate the file with extra user permissions on top of the hook.
-  python3 - "$(settings_file)" <<'PY'
-import json, sys
-p = sys.argv[1]
-with open(p) as f: d = json.load(f)
-d.setdefault("permissions", {}).setdefault("allow", [])
-d["permissions"]["allow"].extend(
-    f"Bash(mkdir:/tmp/agmsg-e2big-off-{i:04d})" for i in range(1, 601)
-)
-with open(p, "w") as f: json.dump(d, f)
-PY
+
+  local allow_json
+  allow_json=$(
+    printf '['
+    local i
+    for i in $(seq 1 600); do
+      [ "$i" -gt 1 ] && printf ','
+      printf '"Bash(mkdir:/tmp/agmsg-e2big-off-%04d)"' "$i"
+    done
+    printf ']'
+  )
+  local inflated
+  inflated=$(sqlite3 :memory: "
+    SELECT json_set(
+      json_set(readfile('$(settings_file)'), '\$.permissions', json('{}')),
+      '\$.permissions.allow', json('$allow_json')
+    );
+  ")
+  printf '%s' "$inflated" > "$(settings_file)"
 
   run bash "$SCRIPTS/delivery.sh" set off claude-code "$TEST_PROJECT"
   [ "$status" -eq 0 ]
