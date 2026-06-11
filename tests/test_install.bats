@@ -179,3 +179,51 @@ teardown() {
   kill "$second" 2>/dev/null || true
   wait 2>/dev/null || true
 }
+
+# --- Pipe-stdin guard: simulate a curl|bash entry path (#98) ---
+#
+# The npm bootstrapper executes the wrapper as `curl ... | bash`, so install.sh
+# runs with its stdin wired to the wrapper script stream rather than a tty.
+# Before #98 this caused the interactive command-name prompt to consume the
+# next line of the wrapper as CMD_NAME — installing the skill under e.g.
+# "rm -rf $TMP/" instead of "agmsg". The guard added in install.sh forces
+# INTERACTIVE=false whenever stdin is not a tty. These tests pipe a payload
+# that would have been swallowed by `read -r` pre-fix, then verify the
+# install landed under the default name and the payload bytes were left
+# untouched on stdin.
+
+@test "install: non-tty stdin falls back to the 'agmsg' default (#98)" {
+  HOME="$FAKE_HOME" bash "$REPO_ROOT/install.sh" </dev/null
+
+  [ -d "$FAKE_HOME/.agents/skills/agmsg" ]
+  [ -f "$SK/.agmsg" ]
+  [ -f "$SK/scripts/whoami.sh" ]
+
+  # No bogus skill directories created from a leaked stdin line.
+  local bogus
+  bogus=$(find "$FAKE_HOME/.agents/skills" -maxdepth 1 -mindepth 1 -type d ! -name agmsg | wc -l | tr -d ' ')
+  [ "$bogus" = "0" ]
+}
+
+@test "install: payload on non-tty stdin is NOT consumed by the prompt (#98)" {
+  # The real failure mode: install.sh's `read -r` would pull the next
+  # line off stdin. Build a stdin that has a sentinel line after what
+  # the install would have prompted for, then assert the sentinel
+  # survived on stdin after install.sh returned.
+  local stdin_capture stdout_capture
+  stdin_capture=$(mktemp)
+  stdout_capture=$(mktemp)
+  {
+    printf 'rm -rf "$TMP"\n'
+    printf 'SENTINEL_SURVIVED\n'
+  } | {
+    HOME="$FAKE_HOME" bash "$REPO_ROOT/install.sh" > "$stdout_capture" 2>&1
+    cat > "$stdin_capture"
+  }
+
+  [ -d "$FAKE_HOME/.agents/skills/agmsg" ]
+  grep -q '^rm -rf "\$TMP"$' "$stdin_capture"
+  grep -q '^SENTINEL_SURVIVED$' "$stdin_capture"
+  ! grep -q 'rm -rf' "$stdout_capture"
+  rm -f "$stdin_capture" "$stdout_capture"
+}

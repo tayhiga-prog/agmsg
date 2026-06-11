@@ -53,6 +53,17 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Force non-interactive when stdin is not a terminal. Without this, the
+# command-name prompt below would call `read -r` on whatever stream is wired
+# to fd 0 — which for `curl ... | bash`-style entry paths (e.g. the npm
+# bootstrapper before its own fix) is the wrapper script itself, so the
+# next line of the wrapper gets consumed as the command name. See #98.
+# The `bash <(curl ...)` form in the README is fine because process
+# substitution preserves stdin; this guard only kicks in for pipe entries.
+if [ ! -t 0 ]; then
+  INTERACTIVE=false
+fi
+
 # --- Check dependencies ---
 if ! command -v sqlite3 &>/dev/null; then
   echo "Error: sqlite3 is required but not found." >&2
