@@ -84,3 +84,28 @@ run_watcher_for() {
   printf '{"session_id":"sess-end"}' | bash "$SCRIPTS/session-end.sh" claude-code "$PROJ" >/dev/null 2>&1 || true
   [ ! -f "$wm" ]
 }
+
+@test "watch: actas-mode watcher creates a ready sentinel and removes it on exit" {
+  local ready="$TEST_SKILL_DIR/run/ready.team__alice"
+  AGMSG_WATCH_INTERVAL=1 bash "$SCRIPTS/watch.sh" "sess-ready" "$PROJ" claude-code alice \
+    >/dev/null 2>&1 &
+  local w=$!
+  # Wait for the watcher to attach and signal readiness.
+  local i
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    [ -e "$ready" ] && break
+    sleep 0.5
+  done
+  [ -e "$ready" ]
+  kill "$w" 2>/dev/null || true
+  wait "$w" 2>/dev/null || true
+  # Removed on exit (sentinel tracks a live watcher).
+  [ ! -e "$ready" ]
+}
+
+@test "watch: a broad (non-actas) watcher does not create a ready sentinel" {
+  bash "$SCRIPTS/join.sh" team bob claude-code "$PROJ" >/dev/null
+  run_watcher_for "sess-broad" "$TEST_SKILL_DIR/broad.log" 1.5
+  [ ! -e "$TEST_SKILL_DIR/run/ready.team__alice" ]
+  [ ! -e "$TEST_SKILL_DIR/run/ready.team__bob" ]
+}
