@@ -88,47 +88,61 @@ mode.
 
 ## Bridge Mechanics
 
-`codex-monitor.sh` starts or reuses an agmsg-managed Codex app-server socket
-under:
+`codex-monitor.sh` starts (or reuses) an agmsg-managed Codex app-server socket
+under `~/.agents/skills/<cmd>/run/`, starts the out-of-sandbox bridge launcher,
+and then connects the Codex TUI to that socket with `--remote`.
 
-```text
-~/.agents/skills/<cmd>/run/
-```
+The SessionStart hook does **not** start the bridge directly — a hook-launched
+process runs inside the Codex sandbox and cannot connect to the unix socket
+(EPERM). Instead:
 
-It then connects the Codex TUI to that socket with `--remote`. Codex's
-SessionStart hook starts `codex-bridge.js` in the background. The bridge:
+1. `session-start.sh` (the hook) resolves the thread id — `CODEX_THREAD_ID` when
+   set, otherwise the newest Codex rollout whose `session_meta` cwd matches the
+   project (fresh / `codex exec` sessions never export `CODEX_THREAD_ID`) — and
+   writes a **request file** under `run/` (it never touches the socket).
+2. `codex-bridge-launcher.sh`, started by `codex-monitor.sh` **outside** the
+   sandbox, reads the request file and starts `codex-bridge.js`.
+3. The bridge connects to the same app-server over **WebSocket-over-UDS**,
+   resumes the thread, and arms `watch-once.sh` via the app-server `process/spawn`
+   API (which polls the agmsg DB for unread rows, `read_at IS NULL`).
+4. On an unread message it inlines the text into a `turn/start` on that thread —
+   surfacing it in the live Codex TUI — then re-arms after the turn ends.
 
-1. Runs `watch-once.sh` through the app-server `process/spawn` API.
-2. Waits for unread agmsg messages addressed to this Codex identity.
-3. Inlines unread inbox text into a Codex turn.
-4. Starts a Codex turn on the current app-server thread.
-
-If a started turn does not consume the unread message, the same unread
-`max_id` remains pending. The bridge detects that unchanged wakeup and stops
-instead of starting an infinite turn loop.
+Turns are serialized (one per thread): a message that arrives while a turn is
+running stays unread and is delivered after the turn completes. The turn ends
+via `turn/completed`, a `thread/status` idle, or a watchdog (the real app-server
+does not reliably send `turn/completed`); only then is the next `watch-once`
+armed. If a turn does not consume the unread message, the same `max_id` reappears
+and the bridge stops instead of looping.
 
 ```mermaid
 flowchart TD
   user["User runs codex"] --> shim["~/.agents/bin/codex shim"]
   shim --> mode{"Project delivery mode?"}
-  mode -- "not monitor" --> real["real codex"]
-  mode -- "monitor" --> launcher["codex-monitor.sh"]
+  mode -- "not monitor / codex exec / --version" --> real["real codex"]
+  mode -- "monitor (interactive)" --> monitor["codex-monitor.sh"]
 
-  launcher --> server{"app-server socket exists?"}
+  monitor --> server{"app-server socket exists?"}
   server -- "no" --> startServer["codex app-server --listen unix://..."]
   server -- "yes" --> reuseServer["reuse socket"]
+  monitor --> launcher["codex-bridge-launcher.sh (outside sandbox)"]
   startServer --> remote["codex --remote unix://..."]
   reuseServer --> remote
 
-  remote --> hook["Codex SessionStart hook"]
-  hook --> bridge["codex-bridge.js"]
-  bridge --> watch["watch-once.sh"]
-  watch --> db[("agmsg SQLite DB")]
+  remote --> hook["SessionStart hook → session-start.sh (in sandbox)"]
+  hook --> thread["resolve thread: CODEX_THREAD_ID || newest matching rollout"]
+  thread --> request["write request file under run/ (no socket — EPERM)"]
+  request -.-> launcher
+  launcher --> bridge["codex-bridge.js → app-server (WebSocket-over-UDS)"]
+  bridge --> watch["arm watch-once.sh (process/spawn)"]
+  watch --> db[("agmsg SQLite DB (read_at IS NULL)")]
   db --> unread{"Unread message?"}
-  unread -- "no" --> wait["wait / arm next wakeup"]
-  unread -- "yes" --> inbox["inline inbox text"]
-  inbox --> turn["app-server start turn"]
+  unread -- "no (timeout)" --> watch
+  unread -- "yes" --> inbox["inline unread inbox text"]
+  inbox --> turn["turn/start on the thread"]
   turn --> tui["Current Codex TUI thread"]
+  tui --> ended["turn ends: completed / idle / watchdog"]
+  ended --> watch
 ```
 
 ## Related Details
