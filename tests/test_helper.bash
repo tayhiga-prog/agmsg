@@ -16,6 +16,15 @@ setup_test_env() {
 
   # Convenience vars
   export SCRIPTS="$TEST_SKILL_DIR/scripts"
+
+  # Sandbox HOME so NO test can touch the developer's real home. Several paths
+  # write under $HOME — e.g. codex-shim-install.sh creates $HOME/.agents/bin/codex
+  # and install.sh's configure_codex_sandbox edits $HOME/.codex/config.toml — and
+  # a leaked write would clobber the real install / shim (and dangle once this
+  # temp dir is torn down). bats runs each test in its own subshell, so the
+  # export is scoped to the test and needs no restore. See #41.
+  export HOME="$TEST_SKILL_DIR/home"
+  mkdir -p "$HOME"
 }
 
 teardown_test_env() {
