@@ -520,6 +520,10 @@ do_set() {
           echo "WARNING: Node.js ('$codex_node') was not found on PATH. The Codex bridge needs Node —"
           echo "  monitor delivery will NOT start until Node is installed."
         fi
+        # The bridge launches from the Codex SessionStart hook, which only fires on
+        # a fresh start — a session that is already running is not retrofitted (#151).
+        echo "Restart your Codex session (quit and relaunch \`codex\`) for the bridge to take effect;"
+        echo "  already-running sessions stay unmonitored until they restart."
         echo "For more info: $CODEX_MONITOR_DOC_URL"
       else
         echo "Future sessions: SessionStart hook will auto-launch the watcher."

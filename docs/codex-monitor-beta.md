@@ -11,8 +11,10 @@ approximates the same experience by launching Codex through an app-server bridge
 > straight through. **Only enable this if you understand PATH precedence and are
 > comfortable with the `codex` command being intercepted.** It also depends on
 > Codex app-server behavior and may break as Codex changes. Known rough edges:
-> the bridge is not torn down when you close the TUI (orphans linger until reboot
-> or `mode off`/manual kill, see #149), and only one Codex identity per project
+> enabling monitor takes effect only on the **next** `codex` start — an
+> already-running session stays unmonitored until you restart it (#151); the
+> bridge is not torn down when you close the TUI (orphans linger until reboot
+> or `mode off`/manual kill, see #149); and only one Codex identity per project
 > is supported (#150).
 
 ## Quick Start
