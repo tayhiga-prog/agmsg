@@ -52,7 +52,7 @@ git clone https://github.com/fujibee/agmsg.git && cd agmsg && ./install.sh
 #    OpenCode:     $agmsg
 ```
 
-That's it. The slash command prompts you for a team name and an agent name on first use, then asks you to pick a [delivery mode](#delivery-modes) (default on Claude Code: `monitor` — real-time push; Codex defaults to `turn` because it has no Monitor tool). After that, you talk to your agent naturally — see [First run](#first-run) below.
+That's it. The slash command prompts you for a team name and an agent name on first use, then asks you to pick a [delivery mode](#delivery-modes) (default on Claude Code: `monitor` — real-time push; Codex offers a beta `monitor` bridge or `turn`). After that, you talk to your agent naturally — see [First run](#first-run) below.
 
 Prefer a different install method? See [Install](#install) below for `npm` / `npx` and the Claude Code plugin marketplace paths.
 
@@ -268,7 +268,7 @@ The command updates `db/config.yaml`, rewrites the project's hook entries, and p
 $agmsg                          — or /skills → agmsg
 ```
 
-Codex supports `mode turn` and `mode off` only — there's no Monitor tool to stream into.
+Codex supports `mode monitor` as a **beta** app-server bridge, plus `mode turn` and `mode off`. Codex has no Monitor tool, so `mode monitor` installs an optional `codex` shim at `~/.agents/bin/codex` (when possible) and routes interactive Codex launches in monitor-mode projects through a small bridge that turns incoming agmsg messages into turns on the current thread; `codex exec` and non-monitor projects pass straight through to real Codex. If the shim can't be installed, launch with `~/.agents/skills/<cmd>/scripts/codex-monitor.sh`. Codex sandboxing must allow writes to the skill's `db/`, `teams/`, and `run/` dirs — `install.sh` configures those `writable_roots` when `~/.codex/config.toml` exists. Setup, PATH notes, and internals: [docs/codex-monitor-beta.md](docs/codex-monitor-beta.md).
 
 ### GitHub Copilot CLI
 
