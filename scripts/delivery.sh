@@ -446,6 +446,31 @@ by this command.
 EOF
 }
 
+# Stop the Codex monitor bridge(s) for a project and remove their run artifacts.
+# Used by `set off codex` (and the manual counterpart to the not-yet-wired auto
+# teardown, #149). Leaves the shared app-server and the global shim alone — only
+# the per-identity bridge is project-scoped. Echoes how many were killed.
+stop_codex_bridge() {
+  local project="$1"
+  local pairs team name pidfile bpid killed=0
+  pairs=$("$SCRIPT_DIR/identities.sh" "$project" codex 2>/dev/null || true)
+  if [ -n "$pairs" ]; then
+    while IFS=$'\t' read -r team name _rest; do
+      [ -n "$team" ] && [ -n "$name" ] || continue
+      pidfile="$RUN_DIR/codex-bridge.$team.$name.pid"
+      [ -f "$pidfile" ] || continue
+      bpid=$(cat "$pidfile" 2>/dev/null || true)
+      if [ -n "$bpid" ] && kill -0 "$bpid" 2>/dev/null; then
+        kill "$bpid" 2>/dev/null && killed=$((killed + 1))
+      fi
+      rm -f "$pidfile" "${pidfile%.pid}.meta" "${pidfile%.pid}.log"
+    done <<EOF
+$pairs
+EOF
+  fi
+  echo "$killed"
+}
+
 do_set() {
   local MODE="${1:?Usage: delivery.sh set <mode> <type> <project_path>}"
   local TYPE="${2:?Missing type}"
@@ -509,7 +534,19 @@ do_set() {
       ;;
     off)
       echo "Future sessions: no automatic delivery."
-      kill_all_watchers "$PROJECT" >/dev/null 2>&1 || true
+      if [ "$TYPE" = "codex" ]; then
+        local stopped
+        stopped=$(stop_codex_bridge "$PROJECT")
+        if [ "${stopped:-0}" -gt 0 ]; then
+          echo "Stopped $stopped Codex bridge process(es) for this project and cleaned their run files."
+        fi
+        echo "Note: the codex shim (~/.agents/bin/codex) is shared across projects, so it was left in place."
+        echo "  If no other project uses monitor mode, remove it and restore your PATH:"
+        echo "    $SKILL_DIR/scripts/codex-shim-install.sh remove"
+        echo "    # then drop ~/.agents/bin from PATH if you added it for monitor"
+      else
+        kill_all_watchers "$PROJECT" >/dev/null 2>&1 || true
+      fi
       emit_stop_directive
       ;;
   esac

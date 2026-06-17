@@ -1158,3 +1158,23 @@ EOF
   [[ "$output" == *"WARNING: Node.js"* ]]
   [[ "$output" == *"monitor delivery will NOT start"* ]]
 }
+
+@test "delivery set off (codex): stops the bridge, cleans run files, notes the shared shim" {
+  bash "$SCRIPTS/join.sh" team alice codex "$TEST_PROJECT" >/dev/null
+  mkdir -p "$TEST_SKILL_DIR/run"
+  # Stand in for a live bridge with a real process we can check kill -0 against.
+  sleep 60 &
+  local bpid=$!
+  echo "$bpid" > "$TEST_SKILL_DIR/run/codex-bridge.team.alice.pid"
+  echo "pid=$bpid" > "$TEST_SKILL_DIR/run/codex-bridge.team.alice.meta"
+  : > "$TEST_SKILL_DIR/run/codex-bridge.team.alice.log"
+
+  run bash "$SCRIPTS/delivery.sh" set off codex "$TEST_PROJECT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Stopped 1 Codex bridge"* ]]
+  [[ "$output" == *"shim"* ]]
+  ! kill -0 "$bpid" 2>/dev/null
+  [ ! -f "$TEST_SKILL_DIR/run/codex-bridge.team.alice.pid" ]
+  [ ! -f "$TEST_SKILL_DIR/run/codex-bridge.team.alice.meta" ]
+  kill "$bpid" 2>/dev/null || true
+}

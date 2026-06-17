@@ -46,22 +46,24 @@ Four possible outputs:
      ```
      Choose delivery mode for incoming messages:
 
-       1) monitor — Real-time push beta
-                    Codex app-server bridge via the optional `codex` shim. Recommended.
+       1) turn    — Check inbox at the end of each assistant turn
+                    Stop hook pulls after each response. Recommended for Codex.
 
-       2) turn    — Check inbox at the end of each assistant turn
-                    Stop hook pulls after each response.
-
-       3) off     — No automatic delivery
+       2) off     — No automatic delivery
                     Manual $__SKILL_NAME__ only.
+
+       3) monitor — Real-time push (BETA, advanced)
+                    Installs a `codex` shim on PATH and routes launches through an
+                    app-server bridge. Opt in ONLY if you understand PATH precedence
+                    and accept experimental behavior. See docs/codex-monitor-beta.md.
 
      [1]:
      ```
 
-     - **Wait for the user's answer before proceeding.** Empty input means `1` (monitor).
-     - Map the chosen number to a mode (`1`→`monitor`, `2`→`turn`, `3`→`off`) and run:
+     - **Wait for the user's answer before proceeding.** Empty input means `1` (turn).
+     - Map the chosen number to a mode (`1`→`turn`, `2`→`off`, `3`→`monitor`) and run:
        `~/.agents/skills/__SKILL_NAME__/scripts/delivery.sh set <mode> codex "$(pwd)"`
-     - If monitor is chosen, tell the user: "Codex monitor beta is enabled. agmsg installs an optional `codex` shim automatically. If the output says `~/.agents/bin` is not on PATH, add `export PATH=\"$HOME/.agents/bin:$PATH\"` to your shell profile, restart the shell, then launch future sessions with normal `codex`. If shim installation was refused because `~/.agents/bin/codex` already exists, use `~/.agents/skills/__SKILL_NAME__/scripts/codex-monitor.sh` or resolve that command conflict. For more info: https://github.com/fujibee/agmsg/blob/main/docs/codex-monitor-beta.md"
+     - If monitor is chosen, tell the user: "Codex monitor is a BETA that changes how `codex` starts — it installs a `codex` shim and needs `~/.agents/bin` first on PATH. If the output says `~/.agents/bin` is not on PATH, add `export PATH=\"$HOME/.agents/bin:$PATH\"` to your shell profile, restart the shell, then launch future sessions with normal `codex`. If shim installation was refused because `~/.agents/bin/codex` already exists, use `~/.agents/skills/__SKILL_NAME__/scripts/codex-monitor.sh` or resolve that command conflict. For more info: https://github.com/fujibee/agmsg/blob/main/docs/codex-monitor-beta.md"
 
   6. Then check inbox for the newly joined team.
 

@@ -3,8 +3,17 @@
 Codex does not expose Claude Code's Monitor tool. agmsg's Codex monitor beta
 approximates the same experience by launching Codex through an app-server bridge.
 
-This feature is experimental. It depends on Codex app-server behavior and may
-need adjustment as Codex changes.
+> ⚠️ **Experimental beta — read before enabling.** This changes how Codex starts.
+> Enabling monitor mode installs a shim at `~/.agents/bin/codex` and asks you to
+> put `~/.agents/bin` **first on your PATH**, so `codex` then resolves to the shim
+> instead of the real binary. In monitor-mode projects the shim re-routes
+> interactive launches through an app-server bridge; everywhere else it passes
+> straight through. **Only enable this if you understand PATH precedence and are
+> comfortable with the `codex` command being intercepted.** It also depends on
+> Codex app-server behavior and may break as Codex changes. Known rough edges:
+> the bridge is not torn down when you close the TUI (orphans linger until reboot
+> or `mode off`/manual kill, see #149), and only one Codex identity per project
+> is supported (#150).
 
 ## Quick Start
 
