@@ -9,6 +9,7 @@ setup_test_env() {
   # (scripts/lib/) come along without enumerating files.
   cp -R "$BATS_TEST_DIRNAME"/../scripts/. "$TEST_SKILL_DIR/scripts/"
   chmod +x "$TEST_SKILL_DIR/scripts/"*.sh
+  chmod +x "$TEST_SKILL_DIR/scripts/"*.js 2>/dev/null || true
 
   # Initialize DB
   bash "$TEST_SKILL_DIR/scripts/init-db.sh"

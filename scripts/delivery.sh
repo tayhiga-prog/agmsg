@@ -381,6 +381,8 @@ apply_settings() {
   mv "$tmp_state" "$hooks_file"
 }
 
+CODEX_MONITOR_DOC_URL="https://github.com/fujibee/agmsg/blob/main/docs/codex-monitor-beta.md"
+
 emit_monitor_directive() {
   local type="$1"
   local project="$2"
@@ -452,6 +454,10 @@ do_set() {
   case "$MODE" in monitor|turn|both|off) ;; *)
     echo "Unknown mode: $MODE (use monitor|turn|both|off)" >&2; exit 1 ;;
   esac
+  if [ "$TYPE" = "codex" ] && [ "$MODE" = "both" ]; then
+    echo "Error: 'both' mode is not supported for codex bridge beta. Use 'monitor', 'turn', or 'off'." >&2
+    exit 1
+  fi
 
   apply_settings "$TYPE" "$PROJECT" "$MODE"
 
@@ -459,8 +465,28 @@ do_set() {
 
   case "$MODE" in
     monitor|both)
-      echo "Future sessions: SessionStart hook will auto-launch the watcher."
-      emit_monitor_directive "$TYPE" "$PROJECT"
+      if [ "$TYPE" = "codex" ]; then
+        if AGMSG_CODEX_SHIM_INSTALL_QUIET=1 "$SKILL_DIR/scripts/codex-shim-install.sh" install; then
+          echo "Codex monitor shim installed at ~/.agents/bin/codex."
+          case ":$PATH:" in
+            *":$HOME/.agents/bin:"*)
+              echo "Future Codex sessions: launch with codex. In monitor-mode projects, the agmsg shim routes interactive Codex sessions through the bridge."
+              ;;
+            *)
+              echo "To make normal codex launches use it, add this before the real Codex binary on PATH:"
+              echo "  export PATH=\"\$HOME/.agents/bin:\$PATH\""
+              echo "Then restart your shell and launch with codex."
+              ;;
+          esac
+        else
+          echo "Codex monitor mode is enabled, but the codex shim was not installed."
+          echo "Future Codex sessions: launch with $SKILL_DIR/scripts/codex-monitor.sh, or resolve the shim install issue above."
+        fi
+        echo "For more info: $CODEX_MONITOR_DOC_URL"
+      else
+        echo "Future sessions: SessionStart hook will auto-launch the watcher."
+        emit_monitor_directive "$TYPE" "$PROJECT"
+      fi
       ;;
     turn)
       echo "Future sessions: Stop hook will check inbox between turns."
