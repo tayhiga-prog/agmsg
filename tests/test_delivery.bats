@@ -1101,6 +1101,8 @@ EOF
   [ "$status" -eq 0 ]
   [[ "$output" == *"Codex monitor shim installed"* ]]
   [[ "$output" == *"launch with codex"* ]]
+  # HOME is sandboxed, so ~/.agents/bin is not on PATH → the loud PATH warning fires.
+  [[ "$output" == *"WARNING: ~/.agents/bin is NOT on your PATH"* ]]
   [[ "$output" == *"export PATH=\"\$HOME/.agents/bin:\$PATH\""* ]]
   [[ "$output" == *"For more info: https://github.com/fujibee/agmsg/blob/main/docs/codex-monitor-beta.md"* ]]
   [[ "$output" != *"Monitor tool"* ]]
@@ -1145,4 +1147,14 @@ EOF
   for _ in {1..20}; do [ -f "$log" ] && break; sleep 0.1; done
   [ -f "$log" ]
   grep -q -- "--thread rollout-thread-999" "$log"
+}
+
+@test "delivery set monitor (codex): warns loudly when Node is missing" {
+  # Node preflight: the bridge is a Node program; enabling monitor without Node
+  # must flag it rather than silently never starting. AGMSG_CODEX_NODE points the
+  # check at a binary that does not exist. See #41.
+  run env AGMSG_CODEX_NODE=__agmsg_no_such_node__ bash "$SCRIPTS/delivery.sh" set monitor codex "$TEST_PROJECT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"WARNING: Node.js"* ]]
+  [[ "$output" == *"monitor delivery will NOT start"* ]]
 }

@@ -473,14 +473,27 @@ do_set() {
               echo "Future Codex sessions: launch with codex. In monitor-mode projects, the agmsg shim routes interactive Codex sessions through the bridge."
               ;;
             *)
-              echo "To make normal codex launches use it, add this before the real Codex binary on PATH:"
-              echo "  export PATH=\"\$HOME/.agents/bin:\$PATH\""
-              echo "Then restart your shell and launch with codex."
+              # Loud, unambiguous: this is the #1 reason monitor silently does nothing.
+              echo "WARNING: ~/.agents/bin is NOT on your PATH, so 'codex' still launches the real"
+              echo "  binary and the monitor bridge will NOT engage. Add this line, restart your shell,"
+              echo "  then launch with codex:"
+              echo "    export PATH=\"\$HOME/.agents/bin:\$PATH\""
               ;;
           esac
         else
           echo "Codex monitor mode is enabled, but the codex shim was not installed."
           echo "Future Codex sessions: launch with $SKILL_DIR/scripts/codex-monitor.sh, or resolve the shim install issue above."
+        fi
+        # Node preflight: the bridge (codex-bridge.js) is a Node program, so
+        # without Node it silently never starts — flag it here at enable time.
+        # Presence only: the bridge uses old/stable APIs (the sole modern feature
+        # is one optional-chaining call, Node 14+), and any Node new enough to run
+        # Codex itself runs the bridge — so a version gate would be noise.
+        # AGMSG_CODEX_NODE overrides the binary the check looks for (also testable).
+        codex_node="${AGMSG_CODEX_NODE:-node}"
+        if ! command -v "$codex_node" >/dev/null 2>&1; then
+          echo "WARNING: Node.js ('$codex_node') was not found on PATH. The Codex bridge needs Node —"
+          echo "  monitor delivery will NOT start until Node is installed."
         fi
         echo "For more info: $CODEX_MONITOR_DOC_URL"
       else
