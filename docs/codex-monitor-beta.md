@@ -11,7 +11,9 @@ approximates the same experience by launching Codex through an app-server bridge
 > straight through. **Only enable this if you understand PATH precedence and are
 > comfortable with the `codex` command being intercepted.** It also depends on
 > Codex app-server behavior and may break as Codex changes. Known rough edges:
-> enabling monitor takes effect only on the **next** `codex` start — an
+> enabling monitor takes effect only after you **restart Codex and send your
+> first message** — the SessionStart hook fires on the first turn, not the
+> moment Codex opens, so the bridge is absent until you interact once; an
 > already-running session stays unmonitored until you restart it (#151); the
 > bridge is not torn down when you close the TUI (orphans linger until reboot
 > or `mode off`/manual kill, see #149); and only one Codex identity per project
@@ -103,9 +105,18 @@ mode.
 under `~/.agents/skills/<cmd>/run/`, starts the out-of-sandbox bridge launcher,
 and then connects the Codex TUI to that socket with `--remote`.
 
-The SessionStart hook does **not** start the bridge directly — a hook-launched
-process runs inside the Codex sandbox and cannot connect to the unix socket
-(EPERM). Instead:
+Codex fires the SessionStart hook on the session's **first turn** (the first
+message you send), not the moment the TUI opens — so the bridge does not exist
+until you interact once after a restart.
+
+The SessionStart hook is designed to **not** start the bridge directly — a
+hook-launched process was observed to run inside the Codex sandbox and fail to
+connect to the unix socket (EPERM). Instead:
+
+> Note: this EPERM-avoidance design (the launcher + request-file rendezvous
+> below) is under review — in practice the hook has been seen to launch a
+> detached bridge directly and connect fine, suggesting the launcher layer may
+> be redundant. See #153.
 
 1. `session-start.sh` (the hook) resolves the thread id — `CODEX_THREAD_ID` when
    set, otherwise the newest Codex rollout whose `session_meta` cwd matches the
