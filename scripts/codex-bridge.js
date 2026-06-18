@@ -23,7 +23,7 @@ Options:
   --team <team>           Limit wakeups to one team.
   --name <agent>          Limit wakeups to one agent name.
   --timeout <sec>         watch-once timeout before re-arming (default: 300).
-  --interval <sec>        watch-once poll interval (default: 5).
+  --interval <sec>        watch-once poll interval (default: 2).
   --max-wakes <n>         Stop after n wakeups, useful for tests.
   --stale-wake-limit <n>  Stop after n repeated unchanged wakeups (default: 1).
   --app-server <url>      Connect through an existing app-server endpoint.
@@ -45,7 +45,7 @@ function parseArgs(argv) {
   const opts = {
     type: "codex",
     timeout: Number(process.env.AGMSG_WATCH_ONCE_TIMEOUT || 300),
-    interval: Number(process.env.AGMSG_WATCH_ONCE_INTERVAL || 5),
+    interval: Number(process.env.AGMSG_WATCH_ONCE_INTERVAL || 2),
     maxWakes: 0,
     staleWakeLimit: Number(process.env.AGMSG_CODEX_BRIDGE_STALE_WAKE_LIMIT || 1),
     inlineInbox: false,

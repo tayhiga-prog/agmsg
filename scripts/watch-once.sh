@@ -40,7 +40,7 @@ done
 
 case "$TIMEOUT" in ''|*[!0-9]*) echo "watch-once: --timeout must be a whole number of seconds" >&2; exit 1 ;; esac
 if [ -z "$INTERVAL" ]; then
-  INTERVAL=5
+  INTERVAL=2
 fi
 case "$INTERVAL" in ''|*[!0-9]*) echo "watch-once: --interval must be a whole number of seconds" >&2; exit 1 ;; esac
 [ "$INTERVAL" -gt 0 ] || INTERVAL=1
