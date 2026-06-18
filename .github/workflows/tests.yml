@@ -85,8 +85,8 @@ jobs:
           # "malformed JSON" bug and are tracked by the full leg below until
           # that is fixed in a separate PR.
           - leg: install helpers
-            filter: "[Ww]indows"
-            target: tests/test_install.bats
+            filter: ""  # TEMP debug
+            target: tests/test_delivery.bats  # TEMP debug
             experimental: false
           - leg: full (experimental)
             filter: ""

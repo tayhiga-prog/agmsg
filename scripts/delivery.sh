@@ -99,6 +99,10 @@ strip_agmsg_event_file() {
     END
     FROM src;
   " > "$tmp"; then
+    {
+      echo "AGMSG_DBG strip FAILED event=$event sql_path=[$sql_path]"
+      echo -n "AGMSG_DBG strip readfile(sql_path)="; sqlite3 :memory: "SELECT quote(readfile('$sql_path'));" 2>&1 | head -c 600; echo
+    } >&2
     rm -f "$tmp"
     return 1
   fi
@@ -178,6 +182,14 @@ add_event_entry_file() {
     END
     FROM base;
   " > "$tmp"; then
+    {
+      echo "AGMSG_DBG add FAILED event=$event type=$hook_type"
+      echo "AGMSG_DBG sql_path=[$sql_path]"
+      echo "AGMSG_DBG cmd_sql=[$cmd_sql] cw_sql=[${cw_sql:-}]"
+      echo -n "AGMSG_DBG readfile(sql_path)="; sqlite3 :memory: "SELECT quote(readfile('$sql_path'));" 2>&1 | head -c 500; echo
+      echo -n "AGMSG_DBG readfile(cmd_sql)="; sqlite3 :memory: "SELECT quote(readfile('$cmd_sql'));" 2>&1 | head -c 500; echo
+      echo -n "AGMSG_DBG entry-build probe="; sqlite3 :memory: "SELECT $hook_obj;" 2>&1 | head -c 400; echo
+    } >&2
     rm -f "$tmp" "$cmd_file" "${cw_file:-}"
     return 1
   fi
