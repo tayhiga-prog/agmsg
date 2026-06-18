@@ -536,3 +536,64 @@ EOF
   [[ "$output" =~ "wakeup 1" ]]
   [[ "$output" =~ "wakeup 2" ]]
 }
+
+@test "codex-bridge: delivers a wake observed while the resumed thread was still active (no stale-stop)" {
+  run node -e 'const r = require("child_process").spawnSync("/bin/sh", ["-c", "true"]); if (r.error) { console.error(r.error.message); process.exit(1); }'
+  if [ "$status" -ne 0 ]; then
+    skip "node child_process.spawn is not available in this sandbox"
+  fi
+
+  # Regression: the bridge resumes an ALREADY-ACTIVE thread (SessionStart fires
+  # on the first user turn, so the human's turn is in flight when the bridge
+  # attaches). watch-once fires while that turn runs, so tryStartTurn() defers
+  # the wake. When the thread later goes idle, onTurnEnded() must DELIVER the
+  # pending wake — not just re-arm, which would re-observe the same unread
+  # max_id and stop the bridge on the stale-wake guard (exit 1).
+  local fake="$TEST_SKILL_DIR/fake-app-server-active-resume.js"
+  local log="$TEST_SKILL_DIR/fake-app-server-active-resume.log"
+  cat >"$fake" <<'EOF'
+const fs = require("fs");
+const readline = require("readline");
+const log = process.argv[2];
+const rl = readline.createInterface({ input: process.stdin });
+let turns = 0;
+function send(value) { process.stdout.write(`${JSON.stringify(value)}\n`); }
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+  fs.appendFileSync(log, `${message.method}\n`);
+  if (message.method === "initialize") {
+    send({ jsonrpc: "2.0", id: message.id, result: {} });
+  } else if (message.method === "thread/resume") {
+    // Resume an already-ACTIVE thread; the human's turn ends shortly after.
+    send({ jsonrpc: "2.0", id: message.id, result: { thread: { id: message.params.threadId, status: { type: "active" } } } });
+    setTimeout(() => {
+      send({ jsonrpc: "2.0", method: "thread/status/changed", params: { threadId: message.params.threadId, status: { type: "idle" } } });
+    }, 80);
+  } else if (message.method === "process/spawn") {
+    send({ jsonrpc: "2.0", id: message.id, result: {} });
+    // Same unread max_id (5) until the wake is delivered; a second message (6)
+    // appears afterwards so the run terminates via --max-wakes.
+    const id = turns === 0 ? 5 : 6;
+    setTimeout(() => {
+      send({ jsonrpc: "2.0", method: "process/exited", params: { processHandle: message.params.processHandle, exitCode: 0, stdout: `status=pending count=1 max_id=${id}\n`, stderr: "" } });
+    }, 10);
+  } else if (message.method === "turn/start") {
+    turns += 1;
+    send({ jsonrpc: "2.0", id: message.id, result: {} });
+    setTimeout(() => {
+      send({ jsonrpc: "2.0", method: "turn/completed", params: { threadId: message.params.threadId } });
+    }, 10);
+  } else if (message.method === "process/kill") {
+    send({ jsonrpc: "2.0", id: message.id, result: {} });
+  }
+});
+EOF
+
+  AGMSG_CODEX_APP_SERVER_CMD="node $fake $log" run node "$SCRIPTS/codex-bridge.js" \
+    --project "$PROJ" --team team --name alice --thread thread-active --timeout 1 --interval 1 --turn-timeout 30 --max-wakes 2
+
+  [ "$status" -eq 0 ]              # not exit 1 from the stale-wake guard
+  [[ "$output" =~ "wakeup 1" ]]
+  [[ "$output" =~ "wakeup 2" ]]    # proves wakeup 1 was delivered, not stale-stopped
+  grep -q "turn/start" "$log"      # the deferred wake actually reached a turn
+}

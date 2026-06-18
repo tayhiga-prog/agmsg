@@ -687,6 +687,16 @@ class CodexBridge {
       await this.shutdown();
       process.exit(0);
     }
+    // A wake can arrive while a turn is still active — the bridge resumed an
+    // already-active thread (SessionStart fires on the first user turn), or a
+    // message landed mid-turn. tryStartTurn() deferred it because turnActive
+    // was set. Deliver that pending wake now instead of re-arming: a fresh
+    // watch-once would re-observe the same unread max_id and the stale-wake
+    // guard would stop the bridge with exit 1 before the message is delivered.
+    if (this.pendingWake) {
+      await this.tryStartTurn();
+      return;
+    }
     // Re-arm detection only after the turn has ended, so a watch-once never
     // re-observes the message the in-flight turn is still handling. A single
     // watch-once is armed between turns.
