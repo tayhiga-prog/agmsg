@@ -88,19 +88,39 @@ if _smells_like_path "$TO" || _smells_like_session_id "$TO"; then
   exit 1
 fi
 
-# In direct mode, verify TO is a registered member of the team.
-# Channel mode validates recipients via resolve-channel-members.sh instead.
-if [ "$MODE" = "direct" ]; then
-  CONFIG="$TEAMS_DIR/$TEAM/config.json"
-  if [ -f "$CONFIG" ]; then
+# Verify FROM is a registered member of the team (all modes).
+# TO validation is direct-mode only; channel mode validates via resolve-channel-members.sh.
+CONFIG="$TEAMS_DIR/$TEAM/config.json"
+if [ -f "$CONFIG" ]; then
+  _config_esc=$(sed "s/'/''/g" "$CONFIG")
+
+  _from_esc=$(printf '%s' "$FROM" | sed "s/'/''/g")
+  _from_registered=$(sqlite3 :memory: \
+    ".param set :json '$_config_esc'" \
+    "SELECT 1 FROM json_each(json_extract(:json, '\$.agents')) WHERE key='$_from_esc' LIMIT 1;" \
+    2>/dev/null | tr -d '\r')
+  if [ -z "$_from_registered" ]; then
+    _members=$(sqlite3 :memory: \
+      ".param set :json '$_config_esc'" \
+      "SELECT key FROM json_each(json_extract(:json, '\$.agents'));" \
+      2>/dev/null | tr -d '\r')
+    echo "Error: from-agent '$FROM' is not a registered member of team '$TEAM'." >&2
+    if [ -n "$_members" ]; then
+      echo "  Members: $(printf '%s\n' "$_members" | paste -sd, -)" >&2
+    fi
+    echo "  Simpler:  msg.sh <to> <message>" >&2
+    exit 1
+  fi
+
+  if [ "$MODE" = "direct" ]; then
     _to_esc=$(printf '%s' "$TO" | sed "s/'/''/g")
     _to_registered=$(sqlite3 :memory: \
-      ".param set :json '$(sed "s/'/''/g" "$CONFIG")'" \
+      ".param set :json '$_config_esc'" \
       "SELECT 1 FROM json_each(json_extract(:json, '\$.agents')) WHERE key='$_to_esc' LIMIT 1;" \
       2>/dev/null | tr -d '\r')
     if [ -z "$_to_registered" ]; then
       _members=$(sqlite3 :memory: \
-        ".param set :json '$(sed "s/'/''/g" "$CONFIG")'" \
+        ".param set :json '$_config_esc'" \
         "SELECT key FROM json_each(json_extract(:json, '\$.agents'));" \
         2>/dev/null | tr -d '\r')
       echo "Error: to-agent '$TO' is not a member of team '$TEAM'." >&2
