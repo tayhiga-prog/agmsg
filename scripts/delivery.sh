@@ -130,41 +130,58 @@ add_event_entry_file() {
   local sql_path
   sql_path=$(sql_readfile_path "$path")
 
-  local hook_inner="\"type\":\"command\",\"command\":\"$cmd\""
+  # Build the entry object with SQLite's json_object()/json_array() rather than
+  # by string-concatenating JSON and SQL-escaping it by hand. The dynamic values
+  # (the command, and the PowerShell commandWindows wrapper) are full of single
+  # quotes and backslashes; the old `sed s/'/''/g` only made the text a valid
+  # SQL *string literal*, not valid JSON, so strict sqlite3 builds on Windows
+  # (>= 3.50) rejected it as "malformed JSON" (#143/#138/#134). Pass the values
+  # in via readfile() of a temp file — keeping them off the SQL/argv entirely,
+  # same rationale as #95 — and let json_object() do the JSON escaping.
+  local cmd_file cw_file cmd_sql cw_sql hook_obj
+  cmd_file=$(mktemp "${TMPDIR:-/tmp}/agmsg-cmd.XXXXXX")
+  printf '%s' "$cmd" > "$cmd_file"
+  cmd_sql=$(sql_readfile_path "$cmd_file")
+  hook_obj="json_object('type','command','command',CAST(readfile('$cmd_sql') AS TEXT)"
   if [ "$hook_type" = "codex" ]; then
-    local cw; cw=$(windows_wrap "$cmd")
-    cw="${cw//\\/\\\\}"; cw="${cw//\"/\\\"}"
-    hook_inner="$hook_inner,\"commandWindows\":\"$cw\""
+    cw_file=$(mktemp "${TMPDIR:-/tmp}/agmsg-cw.XXXXXX")
+    windows_wrap "$cmd" > "$cw_file"
+    cw_sql=$(sql_readfile_path "$cw_file")
+    hook_obj="$hook_obj,'commandWindows',CAST(readfile('$cw_sql') AS TEXT)"
   fi
-  local entry="{\"matcher\":\"\",\"hooks\":[{$hook_inner}]}"
-  local entry_esc
-  entry_esc=$(printf '%s' "$entry" | sed "s/'/''/g")
+  hook_obj="$hook_obj)"
 
   local tmp
   tmp=$(mktemp "${TMPDIR:-/tmp}/agmsg.XXXXXX")
   if ! sqlite3 :memory: "
-    WITH base AS (
-      SELECT CASE WHEN json_extract(readfile('$sql_path'), '\$.hooks') IS NULL
-                  THEN json_set(readfile('$sql_path'), '\$.hooks', json('{}'))
-                  ELSE readfile('$sql_path') END AS s
+    WITH src AS (
+      SELECT coalesce(nullif(readfile('$sql_path'), ''), '{}') AS j
+    ),
+    base AS (
+      SELECT CASE WHEN json_extract(j, '\$.hooks') IS NULL
+                  THEN json_set(j, '\$.hooks', json('{}'))
+                  ELSE j END AS s,
+             json_object('matcher','','hooks', json_array($hook_obj)) AS entry
+      FROM src
     )
     SELECT CASE
       WHEN json_extract(s, '\$.hooks.$event') IS NULL THEN
-        json_set(s, '\$.hooks.$event', json_array(json('$entry_esc')))
+        json_set(s, '\$.hooks.$event', json_array(json(entry)))
       ELSE
         json_set(s, '\$.hooks.$event',
           (SELECT json_group_array(json(v.value)) FROM (
              SELECT value FROM json_each(json_extract(s, '\$.hooks.$event'))
              UNION ALL
-             SELECT '$entry_esc'
+             SELECT entry
            ) v)
         )
     END
     FROM base;
   " > "$tmp"; then
-    rm -f "$tmp"
+    rm -f "$tmp" "$cmd_file" "${cw_file:-}"
     return 1
   fi
+  rm -f "$cmd_file" "${cw_file:-}"
   mv "$tmp" "$path"
 }
 
