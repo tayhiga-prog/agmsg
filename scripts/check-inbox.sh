@@ -78,6 +78,8 @@ if [ -z "$AGENT" ] || [ -z "$TEAMS" ]; then
   exit 0
 fi
 
+WATERMARK_FILE="$SKILL_DIR/run/check-inbox.$AGENT.watermark"
+
 # Cooldown check. The marker is hook runtime state, not message storage, so it
 # lives in the skill's run dir — independent of AGMSG_STORAGE_PATH. Keeping it
 # out of the store means an overridden/sandboxed store still gets delivery even
@@ -109,6 +111,29 @@ touch "$MARKER"
 DB="$(agmsg_db_path)"
 if [ ! -f "$DB" ]; then exit 0; fi
 
+# Watermark: deliver only messages newer than the last delivered id, preventing
+# old unread messages from being replayed on every check (mirrors watch.sh).
+persist_check_watermark() { printf '%s\n' "$WATERMARK" > "$WATERMARK_FILE" 2>/dev/null || true; }
+
+WATERMARK=""
+if [ -f "$WATERMARK_FILE" ]; then
+  WATERMARK="$(cat "$WATERMARK_FILE" 2>/dev/null || true)"
+  case "$WATERMARK" in ''|*[!0-9]*) WATERMARK="" ;; esac
+fi
+if [ -z "$WATERMARK" ]; then
+  WATERMARK="$(agmsg_sqlite "$DB" "SELECT COALESCE(MAX(id), 0) FROM messages;" 2>/dev/null || echo 0)"
+  case "$WATERMARK" in ''|*[!0-9]*) WATERMARK=0 ;; esac
+  persist_check_watermark
+else
+  DB_MAX="$(agmsg_sqlite "$DB" "SELECT COALESCE(MAX(id), 0) FROM messages;" 2>/dev/null || echo 0)"
+  case "$DB_MAX" in ''|*[!0-9]*) DB_MAX=0 ;; esac
+  if [ "$DB_MAX" -lt "$WATERMARK" ]; then
+    WATERMARK="$DB_MAX"
+    persist_check_watermark
+  fi
+fi
+
+LOOP_WM=$WATERMARK
 OUTPUT=""
 IFS=',' read -ra TEAM_LIST <<< "$TEAMS"
 for team in "${TEAM_LIST[@]}"; do
@@ -130,7 +155,7 @@ for team in "${TEAM_LIST[@]}"; do
 
   RESULT=$(agmsg_sqlite "$DB" "
     SELECT from_agent || char(31) || replace(replace(body, char(10), '\n'), char(9), '\t') || char(31) || created_at
-    FROM messages WHERE team='$team' AND to_agent='$AGENT' AND read_at IS NULL
+    FROM messages WHERE team='$team' AND to_agent='$AGENT' AND read_at IS NULL AND id > $LOOP_WM
     ORDER BY created_at ASC;
   ")
   if [ -n "$RESULT" ]; then
@@ -141,9 +166,17 @@ for team in "${TEAM_LIST[@]}"; do
     done <<< "$RESULT"
     OUTPUT+=$'\n'
     # Mark as read
-    agmsg_sqlite "$DB" "UPDATE messages SET read_at=strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE team='$team' AND to_agent='$AGENT' AND read_at IS NULL;" 2>/dev/null || true
+    agmsg_sqlite "$DB" "UPDATE messages SET read_at=strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE team='$team' AND to_agent='$AGENT' AND read_at IS NULL AND id > $LOOP_WM;" 2>/dev/null || true
   fi
 done
+
+# Advance watermark once across all teams after the loop.
+NEW_WM="$(agmsg_sqlite "$DB" "SELECT COALESCE(MAX(id), 0) FROM messages WHERE to_agent='$AGENT' AND id > $LOOP_WM;" 2>/dev/null || echo 0)"
+case "$NEW_WM" in ''|*[!0-9]*) NEW_WM=0 ;; esac
+if [ "$NEW_WM" -gt "$WATERMARK" ]; then
+  WATERMARK="$NEW_WM"
+  persist_check_watermark
+fi
 
 # No new messages
 if [ -z "$OUTPUT" ]; then
