@@ -127,7 +127,7 @@ must track the same resolved project); direct shell invocations and
 
 | Script | Purpose |
 |---|---|
-| `init-db.sh` | Create SQLite database with schema |
+| `internal/init-db.sh` | Create SQLite database with schema |
 | `send.sh` | Insert a message into the database |
 | `inbox.sh` | Show unread messages and mark as read |
 | `history.sh` | Show message history (newest first, displayed oldest first) |

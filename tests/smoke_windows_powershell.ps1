@@ -73,7 +73,7 @@ try {
     $projectBobBash = (& $bash -lc 'cygpath -u "$1"' agmsg-path $projectBob | Out-String).Trim()
     $projectMultiBash = (& $bash -lc 'cygpath -u "$1"' agmsg-path $projectMulti | Out-String).Trim()
 
-    & $bash (Join-Path $scriptsDir 'init-db.sh') | Out-Null
+    & $bash (Join-Path (Join-Path $scriptsDir 'internal') 'init-db.sh') | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "init-db failed: $LASTEXITCODE" }
     & $bash (Join-Path $scriptsDir 'join.sh') demo alice codex $projectSingleBash | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "join alice failed: $LASTEXITCODE" }
