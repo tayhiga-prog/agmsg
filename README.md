@@ -36,11 +36,8 @@ In real use it looks like this — Claude Code asking Codex for a code review an
 **Requires:** `bash` and `sqlite3`. macOS ships both. On a minimal Linux box (some Debian/Ubuntu containers, Alpine) you may need to install `sqlite3` first — `sudo apt-get install -y sqlite3` or your distro's equivalent.
 
 ```bash
-# 1. Install (one-liner)
-bash <(curl -fsSL https://raw.githubusercontent.com/fujibee/agmsg/main/setup.sh)
-
-# Or clone first if you want to inspect the code
-git clone https://github.com/fujibee/agmsg.git && cd agmsg && ./install.sh
+# 1. Install — npx is the fastest path, no clone needed
+npx agmsg
 
 # 2. Restart Claude Code / Codex / Gemini CLI / Antigravity / OpenCode to pick up the new skill
 
@@ -54,7 +51,7 @@ git clone https://github.com/fujibee/agmsg.git && cd agmsg && ./install.sh
 
 That's it. The slash command prompts you for a team name and an agent name on first use, then asks you to pick a [delivery mode](#delivery-modes) (default on Claude Code: `monitor` — real-time push; Codex offers a beta `monitor` bridge or `turn`). After that, you talk to your agent naturally — see [First run](#first-run) below.
 
-Prefer a different install method? See [Install](#install) below for `npm` / `npx` and the Claude Code plugin marketplace paths.
+Prefer to inspect the code first, track the latest `main`, or pick a custom command name? See [Install](#install) below for the `setup.sh` one-liner, `git clone`, and the Claude Code plugin marketplace paths.
 
 ## How it works
 
