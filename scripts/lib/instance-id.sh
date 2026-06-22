@@ -33,6 +33,21 @@
 [ -n "${_AGMSG_INSTANCE_ID_SH:-}" ] && return 0
 _AGMSG_INSTANCE_ID_SH=1
 
+# Cross-platform pid liveness check. Git Bash's kill(1) only sees MSYS2/Cygwin
+# PIDs; native Windows processes (Claude Code, etc.) are invisible to it, so
+# kill -0 always returns false for them (#134). On Windows we fall back to
+# tasklist.exe which queries the native process table.
+_agmsg_pid_alive() {
+  local pid="$1"
+  case "${MSYSTEM:-}" in
+    MINGW*|MSYS*|CLANGARM*)
+      MSYS_NO_PATHCONV=1 tasklist /FI "PID eq $pid" 2>/dev/null | grep -q "$pid"
+      return $?
+      ;;
+  esac
+  kill -0 "$pid" 2>/dev/null
+}
+
 # Compose from an explicit pid. Bare sid when pid is empty/non-numeric.
 agmsg_instance_id_from_pid() {
   local sid="$1" pid="$2"
@@ -102,7 +117,7 @@ agmsg_instance_alive() {
   [ -n "$token" ] || return 1
   if agmsg_instance_is_composite "$token"; then
     local pid="${token##*.}"
-    kill -0 "$pid" 2>/dev/null && return 0
+    _agmsg_pid_alive "$pid" && return 0
     return 1
   fi
   local run f p s
@@ -112,7 +127,7 @@ agmsg_instance_alive() {
     [ -f "$f" ] || continue
     p=${f##*.}
     case "$p" in ''|*[!0-9]*) continue ;; esac
-    kill -0 "$p" 2>/dev/null || continue
+    _agmsg_pid_alive "$p" || continue
     s="$(cat "$f" 2>/dev/null || true)"
     [ "$s" = "$token" ] && return 0
     # upgrade compat: cc-instance stores "<sid>.<pid>" but the lock holds "<sid>"
